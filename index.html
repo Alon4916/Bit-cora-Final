@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Bitácora con Firebase</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<style>
+body {
+    margin: 0;
+    font-family: sans-serif;
+    background: linear-gradient(135deg, #6f4e37, #d7b899);
+}
+
+.panel {
+    width: 90%;
+    max-width: 600px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+}
+
+input, textarea {
+    width: 100%;
+    margin: 6px 0;
+    padding: 10px;
+}
+
+button {
+    padding: 10px;
+    margin-top: 5px;
+    border: none;
+    border-radius: 8px;
+    color: rgb(#f6c7a3);
+    cursor: pointer;
+}
+
+.guardar { background:#8b5e3c; }
+.consultar { background:#a47148; }
+.limpiar { background:#5a3e2b; }
+.agregar { background:#b08968; }
+
+.card {
+    background: #b08968;
+    padding: 10px;
+    margin-top: 10px;
+    border-radius: 10px;
+}
+
+.mensaje {
+    text-align:center;
+    margin-top:10px;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<div class="panel">
+
+<input id="nombrePractica" placeholder="Nombre de práctica">
+<input id="nombre" placeholder="Nombre">
+<input id="grupo" placeholder="Grupo">
+<input id="fecha" type="date">
+
+<div id="listaActividades">
+<input class="actividad" placeholder="Actividad 1">
+</div>
+
+<button class="agregar" onclick="agregarActividad()">Agregar actividad</button>
+
+<textarea id="descripcion" placeholder="Descripción"></textarea>
+<textarea id="resultado" placeholder="Resultado"></textarea>
+<textarea id="conclusion" placeholder="Conclusión"></textarea>
+
+<button class="guardar" onclick="guardar()">Guardar</button>
+<button class="consultar" onclick="toggleVer()">Ver</button>
+<button class="limpiar" onclick="limpiar()">Limpiar</button>
+
+<div id="status" class="mensaje"></div>
+<div id="recordatorio" class="mensaje"></div>
+<div id="resultados"></div>
+
+</div>
+
+<script>
+
+/* 🔥 FIREBASE */
+const firebaseConfig = {
+apiKey: "AIzaSyAFnoymv8GXRbXT_OQVGOgJbFsN9T1lOI0",
+authDomain: "bitacora-final-7192d.firebaseapp.com",
+projectId: "bitacora-final-7192d",
+
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+/* VARIABLES */
+let editandoID = null;
+let visible = false;
+
+/* INPUTS */
+const nombrePractica = document.getElementById("nombrePractica");
+const nombre = document.getElementById("nombre");
+const grupo = document.getElementById("grupo");
+const fecha = document.getElementById("fecha");
+const descripcion = document.getElementById("descripcion");
+const resultado = document.getElementById("resultado");
+const conclusion = document.getElementById("conclusion");
+
+/* AGREGAR ACTIVIDAD */
+function agregarActividad() {
+    const cont = document.getElementById("listaActividades");
+    const input = document.createElement("input");
+    input.className = "actividad";
+    input.placeholder = "Actividad";
+    cont.appendChild(input);
+}
+
+/* LIMPIAR */
+function limpiar() {
+    document.querySelectorAll("input, textarea").forEach(e => e.value = "");
+    document.getElementById("listaActividades").innerHTML =
+        '<input class="actividad" placeholder="Actividad 1">';
+    editandoID = null;
+}
+
+/* GUARDAR */
+async function guardar() {
+
+    const actividades = [];
+    document.querySelectorAll(".actividad").forEach(a => {
+        if (a.value) actividades.push(a.value);
+    });
+
+    const datos = {
+        nombrePractica: nombrePractica.value,
+        nombre: nombre.value,
+        grupo: grupo.value,
+        fecha: fecha.value,
+        actividades,
+        descripcion: descripcion.value,
+        resultado: resultado.value,
+        conclusion: conclusion.value,
+    };
+
+    if (editandoID) {
+        await db.collection("bitacora").doc(editandoID).update(datos);
+    } else {
+        datos.createdAt = new Date();
+        await db.collection("bitacora").add(datos);
+    }
+
+    limpiar();
+    revisarSiHayDatos();
+}
+
+/* 🔁 TOGGLE VER */
+async function toggleVer() {
+    visible = !visible;
+
+    if (visible) {
+        consultar();
+    } else {
+        document.getElementById("resultados").innerHTML = "";
+        revisarSiHayDatos();
+    }
+}
+
+/* CONSULTAR */
+async function consultar() {
+
+    const cont = document.getElementById("resultados");
+    cont.innerHTML = "";
+
+    const snap = await db.collection("bitacora").get();
+
+    snap.forEach(doc => {
+        const d = doc.data();
+
+        cont.innerHTML += `
+        <div class="card">
+        <b>${d.nombrePractica}</b><br>
+        ${d.nombre} - ${d.grupo}<br>
+        ${d.fecha}<br><br>
+
+        <button onclick="editar('${doc.id}')">Editar</button>
+        <button onclick="eliminar('${doc.id}')">Eliminar</button>
+        </div>`;
+    });
+
+    document.getElementById("recordatorio").innerText = "";
+}
+
+/* RECORDATORIO */
+async function revisarSiHayDatos() {
+
+    const snap = await db.collection("bitacora").get();
+
+    if (snap.size > 0 && !visible) {
+        document.getElementById("recordatorio").innerText =
+            "Tienes prácticas guardadas 📘";
+    } else {
+        document.getElementById("recordatorio").innerText = "";
+    }
+}
+
+/* EDITAR */
+async function editar(id) {
+
+    const doc = await db.collection("bitacora").doc(id).get();
+    const d = doc.data();
+
+    nombrePractica.value = d.nombrePractica || "";
+    nombre.value = d.nombre || "";
+    grupo.value = d.grupo || "";
+    fecha.value = d.fecha || "";
+    descripcion.value = d.descripcion || "";
+    resultado.value = d.resultado || "";
+    conclusion.value = d.conclusion || "";
+
+    const cont = document.getElementById("listaActividades");
+    cont.innerHTML = "";
+
+    (d.actividades || []).forEach(a => {
+        const input = document.createElement("input");
+        input.className = "actividad";
+        input.value = a;
+        cont.appendChild(input);
+    });
+
+    editandoID = id;
+}
+
+/* ELIMINAR */
+async function eliminar(id) {
+    await db.collection("bitacora").doc(id).delete();
+    consultar();
+}
+
+/* INICIO */
+revisarSiHayDatos();
+
+</script>
+
+</body>
+</html>
